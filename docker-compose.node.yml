@@ -1,0 +1,21 @@
+services:
+  shipper:
+    build: .
+    container_name: rw-log-shipper
+    restart: unless-stopped
+    command: ["python3", "/app/shipper.py"]
+    environment:
+      - LOG_NODE_NAME=${LOG_NODE_NAME:?Set LOG_NODE_NAME (ru/pl/de) in .env}
+      - LOG_COLLECTOR_URL=${LOG_COLLECTOR_URL:?Set LOG_COLLECTOR_URL in .env}
+      - LOG_COLLECTOR_TOKEN=${LOG_COLLECTOR_TOKEN:?Set LOG_COLLECTOR_TOKEN in .env}
+      - LOG_ACCESS_FILE=/var/log/xray/access.log
+      - LOG_STATE_FILE=/var/lib/rw-logs/shipper.pos
+      - LOG_BATCH_SIZE=${LOG_BATCH_SIZE:-50}
+      - LOG_INTERVAL=${LOG_INTERVAL:-5}
+    volumes:
+      # Путь к папке с access.log на хосте
+      - ${HOST_LOG_DIR:-/var/log/remnanode}:/var/log/xray:ro
+      - rw-shipper-state:/var/lib/rw-logs
+
+volumes:
+  rw-shipper-state:

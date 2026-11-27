@@ -1,0 +1,33 @@
+services:
+  collector:
+    build: .
+    container_name: rw-log-collector
+    restart: unless-stopped
+    command: ["python3", "/app/collector.py", "--host", "0.0.0.0", "--port", "9876"]
+    environment:
+      - LOG_COLLECTOR_TOKEN=${LOG_COLLECTOR_TOKEN:?Set LOG_COLLECTOR_TOKEN in .env}
+      - LOG_DB=/var/lib/rw-logs/logs.db
+    ports:
+      # Закрыть 9876 через ufw (разрешить только IP нод RU/PL/DE)
+      # или поменять на 127.0.0.1:9876:9876 если шлёте через FRP
+      - "9876:9876"
+    volumes:
+      - rw-logs-data:/var/lib/rw-logs
+
+  viewer:
+    build: .
+    container_name: rw-log-viewer
+    restart: unless-stopped
+    command: ["python3", "/app/viewer.py", "--serve", "--port", "9877"]
+    environment:
+      - LOG_DB=/var/lib/rw-logs/logs.db
+    ports:
+      # Доступ только с localhost (открывать через SSH-туннель: ssh -L 9877:127.0.0.1:9877 ...)
+      - "127.0.0.1:9877:9877"
+    volumes:
+      - rw-logs-data:/var/lib/rw-logs:ro
+    depends_on:
+      - collector
+
+volumes:
+  rw-logs-data:

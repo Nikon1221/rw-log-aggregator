@@ -1,0 +1,10 @@
+FROM python:3.12-alpine
+
+WORKDIR /app
+
+# Никаких внешних зависимостей — только стандартная библиотека Python
+COPY collector.py shipper.py viewer.py /app/
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python3", "/app/collector.py"]
