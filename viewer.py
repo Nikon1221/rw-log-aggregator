@@ -310,6 +310,7 @@ setInterval(load, 30000);
 
 # ─── Entry point ──────────────────────────────────────────────────────────────
 def main():
+    global DB_PATH
     p = argparse.ArgumentParser(description="NikonVPN log viewer")
     p.add_argument("--db",     default=DB_PATH, help="путь к SQLite DB")
     p.add_argument("--hours",  type=int, default=24, help="за сколько часов смотреть")
@@ -321,7 +322,6 @@ def main():
     p.add_argument("--port",   type=int, default=9877)
     args = p.parse_args()
 
-    global DB_PATH
     DB_PATH = args.db
 
     if args.serve:
