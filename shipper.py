@@ -43,16 +43,15 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ─── Парсер строки Xray access log ────────────────────────────────────────────
-# Пример:
-# 2026/11/27 12:34:56 from 1.2.3.4:50123 accepted email: someuser@remnawave [tcp] >> example.com:443 [proxy]
+# Реальный формат Xray 26.x:
+# 2026/11/27 18:16:09.578736 from 185.54.239.176:58314 accepted tcp:8.8.8.8:443 [VLESS_REALITY_RU -> VLESS_OUTBOUND_TO_GERMANY] email: 9
 PATTERN = re.compile(
-    r"^(?P<date>\d{4}/\d{2}/\d{2})\s+(?P<time>\d{2}:\d{2}:\d{2})"
-    r"\s+from\s+(?P<src>[^\s]+)"
+    r"^(?P<date>\d{4}/\d{2}/\d{2})\s+(?P<time>\d{2}:\d{2}:\d{2})(?:\.\d+)?"
+    r"\s+from\s+(?:(?P<src_net>tcp|udp):)?(?P<src>\S+)"
     r"\s+accepted"
+    r"\s+(?:(?P<network>tcp|udp):)?(?P<dest>\S+)"
+    r"(?:\s+\[(?P<route>[^\]]+)\])?"
     r"(?:\s+email:\s+(?P<email>\S+))?"
-    r"\s+\[(?P<network>[^\]]+)\]"
-    r"\s+>>\s+(?P<dest>[^\s]+)"
-    r"\s+\[(?P<outbound>[^\]]+)\]"
 )
 
 def parse_line(line: str) -> dict | None:
@@ -83,19 +82,26 @@ def parse_line(line: str) -> dict | None:
         except (json.JSONDecodeError, KeyError):
             return None
 
-    # Стандартный текстовый формат
+    # Стандартный текстовый формат Xray
     m = PATTERN.match(line)
     if not m:
         return None
 
     dest_full = m.group("dest")
     host, _, port_s = dest_full.rpartition(":")
-
-    # Убираем скобки из IP если вдруг IPv6 типа [::1]:443
     host = host.strip("[]") if host else dest_full
 
     src_full = m.group("src")
     src_ip, _, _ = src_full.rpartition(":")
+    src_ip = src_ip.strip("[]") if src_ip else src_full
+
+    route = m.group("route") or ""
+    if "->" in route:
+        outbound = route.split("->")[-1].strip()
+    elif ">>" in route:
+        outbound = route.split(">>")[-1].strip()
+    else:
+        outbound = route.strip() or None
 
     ts_str = f"{m.group('date')} {m.group('time')}"
     try:
@@ -110,8 +116,8 @@ def parse_line(line: str) -> dict | None:
         "src_ip":    src_ip,
         "dest_host": host,
         "dest_port": int(port_s) if port_s.isdigit() else None,
-        "network":   m.group("network"),
-        "outbound":  m.group("outbound"),
+        "network":   m.group("network") or m.group("src_net"),
+        "outbound":  outbound,
         "raw":       line,
     }
 
@@ -150,6 +156,7 @@ def ship_batch(records: list[dict]) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
+            log.info("Shipped %d records", len(records))
             return True
     except urllib.error.URLError as e:
         log.warning("Failed to ship batch: %s", e)
